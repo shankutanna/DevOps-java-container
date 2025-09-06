@@ -1,47 +1,31 @@
 node {
-    // reference to maven
-    // ** NOTE: This 'maven-3.5.2' Maven tool must be configured in the Jenkins Global Configuration.   
     def mvnHome = tool 'maven-3.5.2'
-
-    // holds reference to docker image
     def dockerImage
-    // ip address of the docker private repository(nexus)
- 
-    def dockerImageTag = "devopsexample${env.BUILD_NUMBER}"
-    
-    stage('Clone Repo') { // for display purposes
-      // Get some code from a GitHub repository
-      git 'https://github.com/shankutanna/DevOps-java-container.git'
-      // Get the Maven tool.
-      // ** NOTE: This 'maven-3.5.2' Maven tool must be configured
-      // **       in the global configuration.           
-      mvnHome = tool 'maven-3.5.2'
+    def dockerImageTag = "devopsexample:${env.BUILD_NUMBER}"
+
+    stage('Clone Repo') {
+        git 'https://github.com/shankutanna/DevOps-java-container.git'
+        mvnHome = tool 'maven-3.5.2'
     }    
-  
+
     stage('Build Project') {
-      // build project via maven
-      sh "'${mvnHome}/bin/mvn' clean install"
+        sh "'${mvnHome}/bin/mvn' clean install"
     }
 		
     stage('Build Docker Image') {
-      // build docker image
-      dockerImage = docker.build("devopsexample:${env.BUILD_NUMBER}")
+        dockerImage = docker.build(dockerImageTag)
     }
    	  
-    stage('Deploy Docker Image and login'){
-      
-      echo "Docker Image Tag Name: ${dockerImageTag}"
-	  
-        sh "docker images"
-        sh "docker login -u umatanna9 -p IlikeDocker" // put PWD
-	
+    stage('Docker Login & Push') {
+        withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+            sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+            
+            // Tag with your Docker Hub repo name
+            sh "docker tag ${dockerImage.imageName()} $DOCKER_USER/devopsexample:${env.BUILD_NUMBER}"
+            
+            // Push to Docker Hub
+            sh "docker push $DOCKER_USER/devopsexample:${env.BUILD_NUMBER}"
+        }
+    }
 }
-    stage('Docker push'){
-       // docker images | awk '{print $3}' | awk 'NR==2'
-	// sh "docker images | awk '{print $3}' | awk 'NR==2'"
-	//sh echo "Enter the docker lattest imageID"
-	//sh "read imageid"
-	   sh "docker tag f525e33ed73d umatanna9/myapplication" //must change your name and tag no
-        sh "docker push   umatanna9/myapplication"
-  }
-}
+
