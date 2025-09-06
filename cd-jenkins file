@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME      = 'umatanna9/devopsexample'
+        IMAGE_TAG       = '12'              // existing Docker tag
+        CONTAINER_NAME  = 'myapp'
+        HOST_PORT       = '2222'
+        CONTAINER_PORT  = '2222'
+    }
+
+    stages {
+        stage('Pull & Deploy Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    script {
+                        // Login to Docker Hub
+                        sh """
+                            echo "Logging in to Docker Hub..."
+                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+                        """
+
+                        // Pull the Docker image
+                        sh """
+                            echo "Pulling image ${IMAGE_NAME}:${IMAGE_TAG}..."
+                            docker pull ${IMAGE_NAME}:${IMAGE_TAG}
+                        """
+
+                        // Stop and remove old container if it exists
+                        sh """
+                            echo "Stopping and removing old container (if any)..."
+                            docker rm -f ${CONTAINER_NAME} || true
+                        """
+
+                        // Run the new container on port 2222
+                        sh """
+                            echo "Running new container ${CONTAINER_NAME} on port ${HOST_PORT}..."
+                            docker run -d --name ${CONTAINER_NAME} -p ${HOST_PORT}:${CONTAINER_PORT} ${IMAGE_NAME}:${IMAGE_TAG}
+                        """
+
+                        sh 'echo "Deployment successful! Container is running on port ${HOST_PORT}."'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "CD pipeline failed!"
+        }
+        success {
+            echo "CD pipeline succeeded!"
+        }
+    }
+}
