@@ -1,31 +1,49 @@
-node {
-    def mvnHome = tool 'maven-3.5.2'
-    def dockerImage
-    def dockerImageTag = "devopsexample:${env.BUILD_NUMBER}"
+pipeline {
+    agent any
 
-    stage('Clone Repo') {
-        git 'https://github.com/shankutanna/DevOps-java-container.git'
-        mvnHome = tool 'maven-3.5.2'
-    }    
+    environment {
+        // Maven tool configured in Jenkins Global Tools
+        MVN_HOME = tool 'maven-3.5.2'
+    }
 
-    stage('Build Project') {
-        sh "'${mvnHome}/bin/mvn' clean install"
-    }
-		
-    stage('Build Docker Image') {
-        dockerImage = docker.build(dockerImageTag)
-    }
-   	  
-    stage('Docker Login & Push') {
-        withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-            sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-            
-            // Tag with your Docker Hub repo name
-            sh "docker tag ${dockerImage.imageName()} $DOCKER_USER/devopsexample:${env.BUILD_NUMBER}"
-            
-            // Push to Docker Hub
-            sh "docker push $DOCKER_USER/devopsexample:${env.BUILD_NUMBER}"
+    stages {
+        stage('Clone Repo') {
+            steps {
+                git 'https://github.com/shankutanna/DevOps-java-container.git'
+            }
+        }
+
+        stage('Build Project with Maven') {
+            steps {
+                sh "'${MVN_HOME}/bin/mvn' clean install"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
+                                                  usernameVariable: 'DOCKER_USER',
+                                                  passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                      echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                      docker pull openjdk:8-jdk-alpine || true
+                      docker build -t $DOCKER_USER/devopsexample:${BUILD_NUMBER} .
+                    '''
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds',
+                                                  usernameVariable: 'DOCKER_USER',
+                                                  passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                      echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                      docker push $DOCKER_USER/devopsexample:${BUILD_NUMBER}
+                    '''
+                }
+            }
         }
     }
 }
-
